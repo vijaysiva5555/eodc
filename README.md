@@ -45,6 +45,13 @@ Derived from the sample data in the deck; the deck does not state them:
 ## OCR (src/lib/ocr.ts)
 Reads the text layer of the three PDFs (unpdf) and extracts fields with regular expressions, flagging anything missing, malformed or inconsistent (for example IEC differs between licence and e-Bond) as "Check". The patterns are written from the field names in the deck: tune them against real DGFT, ICEGATE and e-BG PDFs. Scanned PDFs have no text layer; plug an image OCR engine into `runOcr` for those.
 
+## Licence chat
+Each licence has one conversation between the importer (IEC login) and the EODC cell (all officers).
+- Importer: **Messages** box at the bottom of the licence page; "New message from the EODC cell" on the home page; **Messages** in the top bar lists all conversations.
+- Officer: **Chat with party** tab on the licence page (with an unread count); **Messages** in the top bar and a **Chat messages** tile on Home list conversations, unread first.
+- Text up to 4,000 characters, optional PDF/JPG/PNG attachment up to 10 MB (stored like other uploads, in S3). New messages appear within about 8 seconds; "Sent" turns to "Seen" when the other side opens the chat. A message from the party counts as read once any officer opens it.
+- The importer is e-mailed (stub in `src/lib/notify.ts`) when the EODC cell writes. Every message is in the Activity log. Closed licences keep their conversation read-only.
+
 ## File storage (S3)
 Every uploaded PDF (licence, e-Bond, e-BG, party submissions and replies, alert/notice letters, SCN/PH/OIO) is stored in S3 at `<AWS_S3_PREFIX>/<path>`, for example `import/licences/0711019337/licence_….pdf`, `import/submissions/ic_….pdf`. Settings in `.env.local`: `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_S3_PREFIX`. Objects are private and encrypted (SSE-S3); users open them through `/api/files`, which checks the login (importers see only their own files). Without `AWS_S3_BUCKET` the app keeps files in `./storage` (local dev). Files saved locally before S3 was switched on are still read from `./storage`; copy them with `npm run upload-storage-to-s3`.
 

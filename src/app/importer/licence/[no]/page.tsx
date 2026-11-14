@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import Shell from '@/components/Shell';
+import ChatPanel from '@/components/ChatPanel';
 import { needImporter } from '@/lib/guard';
 import { Licence } from '@/models/Licence';
 import { fmtDate, rs } from '@/lib/format';
@@ -39,9 +40,10 @@ export default async function ImporterLicence({ params }: { params: { no: string
               <Link className="btn ghost" href={`${base}/ms`}>Other document</Link>
             </div></>}
           <p className="note">Files: {l.attachments.map((a: any, i: number) => <span key={i}>{i > 0 && ' · '}<a href={`/api/files?p=${encodeURIComponent(a.path)}`} target="_blank">{a.docType === 'DGFT licence' ? 'Licence' : a.docType}.pdf</a></span>)}</p>
-          <p className="note">Fields are read from your documents by OCR and cannot be edited here. Write to the EODC cell to correct an entry.</p>
+          <p className="note">Fields are read from your documents by OCR and cannot be edited here. Use the messages below to ask the EODC cell to correct an entry.</p>
         </div>
       </div>
+      <div id="chat" style={{ marginTop: 22, scrollMarginTop: 20 }}><ChatPanel licenceNo={l.licenceNo} role="importer" title="Messages with the EODC cell" /></div>
     </Shell>
   );
 }

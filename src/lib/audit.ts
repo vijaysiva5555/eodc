@@ -43,4 +43,5 @@ export const ACTION_LABEL: Record<string, string> = {
   submit_document: 'Importer submitted document', reply_query: 'Importer replied to query',
   assign: 'Assigned inbox items', raise_query: 'Raised query', action_over: 'Marked action over',
   alert_reminder: 'Sent reminder notice', alert_flag_scn: 'Flagged for SCN',
+  chat_message: 'Sent chat message',
 };

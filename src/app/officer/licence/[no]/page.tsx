@@ -4,6 +4,8 @@ import Shell from '@/components/Shell';
 import FormPanel from '@/components/FormPanel';
 import LicenceEdit from '@/components/LicenceEdit';
 import DataTable from '@/components/DataTable';
+import ChatPanel from '@/components/ChatPanel';
+import { ChatMessage } from '@/models/ChatMessage';
 import { time, type SortVal } from '@/lib/sort';
 import { needOfficer } from '@/lib/guard';
 import { Licence } from '@/models/Licence';
@@ -15,6 +17,7 @@ const GROUPS = [
   { title: 'Captured by OCR', tabs: [['details', 'Licence details'], ['bond', 'Bond'], ['bg', 'BG'], ['attachments', 'Attachments']] },
   { title: 'Submitted by party', tabs: [['ic', 'IC'], ['eodc', 'EODC'], ['dl', 'DL & misc']] },
   { title: 'Uploaded by officer', tabs: [['alerts', 'Alerts'], ['notice', 'Simple notice'], ['adjudication', 'Adjudication']] },
+  { title: 'Conversation', tabs: [['chat', 'Chat with party']] },
 ] as const;
 const file = (p?: string, dl = false) => `/api/files?p=${encodeURIComponent(p || '')}${dl ? '&dl=1' : ''}`;
 
@@ -24,6 +27,7 @@ export default async function LicencePage({ params, searchParams }: { params: { 
   if (!l) notFound();
   const imp: any = await Importer.findOne({ iec: l.iec }).lean();
   const subs: any[] = await Submission.find({ licenceNo: l.licenceNo }).sort({ createdAt: 1 }).lean();
+  const unread = await ChatMessage.countDocuments({ licenceNo: l.licenceNo, from: 'importer', readAt: null });
   const tab = GROUPS.flatMap((g) => g.tabs.map((t) => t[0] as string)).includes(searchParams.tab || '') ? searchParams.tab! : 'details';
   const no = l.licenceNo; const adj = l.adjudication || {};
   const badge = l.status === 'closed' ? { t: `Closed · ${fmtDate(l.closedOn)}`, c: 'dark' }
@@ -51,7 +55,7 @@ export default async function LicencePage({ params, searchParams }: { params: { 
       <div className="row" style={{ marginBottom: 14, alignItems: 'flex-start' }}>
         {GROUPS.map((g) => <div className="group" key={g.title}><small>{g.title}</small><div className="chips">{g.tabs.map(([k, label]) => {
           const on = tab === k || (k === 'bond' && tab === 'bg') || (k === 'bg' && tab === 'bond') || (k === 'ic' && tab === 'eodc') || (k === 'eodc' && tab === 'ic') || (k === 'alerts' && tab === 'notice') || (k === 'notice' && tab === 'alerts');
-          return <Link key={k} className="chip" href={`/officer/licence/${no}?tab=${k}`} aria-current={on ? 'page' : undefined}>{label}</Link>; })}</div></div>)}
+          return <Link key={k} className="chip" href={`/officer/licence/${no}?tab=${k}`} aria-current={on ? 'page' : undefined}>{label}{k === 'chat' && unread > 0 && tab !== 'chat' && <span className="count" aria-label={`${unread} unread`}>{unread}</span>}</Link>; })}</div></div>)}
       </div>
 
       {tab === 'details' && <div className="split" style={{ gridTemplateColumns: '1.4fr 1fr' }}>
@@ -114,6 +118,8 @@ export default async function LicencePage({ params, searchParams }: { params: { 
             </div>))}
         </div>
         <p className="note">Upload asks for: title, letter no., date and PDF.</p></>}
+
+      {tab === 'chat' && <ChatPanel licenceNo={no} role="officer" title={`Chat with ${l.partyName}`} />}
 
       {tab === 'adjudication' && <div className="grid3" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
         <div className={`stage ${adj.scn?.no ? '' : 'pending'}`}><small className="k">Stage 1 · {adj.scn?.no ? 'Done' : 'Pending'}</small><h3 style={{ fontFamily: 'inherit' }}>Show cause notice</h3>
