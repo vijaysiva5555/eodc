@@ -3,10 +3,10 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { send } from './api';
 
-type Init = Record<'licenceDate' | 'eoEndsOn' | 'issuingOffice' | 'partyName' | 'dutySaved' | 'address' | 'email' | 'mobile', string>;
+type Init = Record<'licenceDate' | 'eoEndsOn' | 'issuingOffice' | 'partyName' | 'dutySaved' | 'address' | 'email' | 'altEmail' | 'mobile', string>;
 const LABELS: [keyof Init, string, string][] = [
   ['partyName', 'Party', 'text'], ['licenceDate', 'Licence date', 'date'], ['issuingOffice', 'Issuing office', 'text'], ['dutySaved', 'Duty saved (₹)', 'number'],
-  ['eoEndsOn', 'EO period ends', 'date'], ['address', 'Address', 'text'], ['email', 'Email', 'email'], ['mobile', 'Mobile', 'text'],
+  ['eoEndsOn', 'EO period ends', 'date'], ['address', 'Address', 'text'], ['email', 'Email', 'email'], ['altEmail', 'Alternative email (optional)', 'email'], ['mobile', 'Mobile', 'text'],
 ];
 
 // Corrections to OCR values. Only changed fields are sent; the server logs each with user and time.

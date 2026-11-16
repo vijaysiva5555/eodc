@@ -37,7 +37,7 @@ export const ACTION_LABEL: Record<string, string> = {
   login: 'Logged in', login_failed: 'Failed login', account_locked: 'Account locked after failed logins', logout: 'Logged out',
   importer_login: 'Importer logged in (OTP)', importer_register: 'Importer registered', change_password: 'Changed password',
   create_user: 'Created user', update_user: 'Changed user', create_superadmin: 'Super admin account set up',
-  add_licence: 'Added licence', correct_licence: 'Corrected licence details', add_bond: 'Added bond', add_bg: 'Added BG',
+  add_licence: 'Added licence', correct_licence: 'Corrected licence details', add_bond: 'Added bond', add_bg: 'Added BG', update_bg: 'Updated BG bank contact',
   upload_alert: 'Uploaded alert letter', upload_notice: 'Uploaded simple notice',
   adjudication_scn: 'Recorded show cause notice', adjudication_ph: 'Recorded PH notice', adjudication_oio: 'Recorded Order-in-Original',
   submit_document: 'Importer submitted document', reply_query: 'Importer replied to query',

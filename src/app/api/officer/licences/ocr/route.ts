@@ -30,9 +30,9 @@ export async function POST(req: Request) {
     const dup = no ? await Licence.findOne({ licenceNo: no }).select('licenceNo scheme status partyName').lean() : null;
     // The e-Bond does not carry the importer's e-mail / mobile. If this IEC is already known, use its contact details.
     const iec = result.fields.find((f) => f.key === 'iec')?.value;
-    const imp: any = iec ? await Importer.findOne({ iec }).select('email mobile address').lean() : null;
+    const imp: any = iec ? await Importer.findOne({ iec }).select('email altEmail mobile address').lean() : null;
     if (imp) for (const f of result.fields) {
-      if (!['email', 'mobile', 'address'].includes(f.key) || f.value || !imp[f.key]) continue;
+      if (!['email', 'altEmail', 'mobile', 'address'].includes(f.key) || f.value || !imp[f.key]) continue;
       f.value = f.key === 'mobile' ? String(imp.mobile).replace(/\D/g, '').slice(-10) : String(imp[f.key]).trim();
       f.status = 'OK'; f.note = 'From the existing importer record';
     }

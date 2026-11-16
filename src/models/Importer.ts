@@ -4,6 +4,7 @@ const s = new Schema({
   name: { type: String, required: true },
   address: String,
   email: { type: String, required: true },   // e-Bond contact email
+  altEmail: String,                          // optional second e-mail: gets a copy of every notice (not used for login)
   mobile: { type: String, required: true },  // e-Bond contact mobile
   registered: { type: Boolean, default: false },
 }, { timestamps: true });

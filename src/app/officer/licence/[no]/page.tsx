@@ -12,6 +12,8 @@ import { Licence } from '@/models/Licence';
 import { Importer } from '@/models/Importer';
 import { Submission } from '@/models/Submission';
 import { fmtDate, fmtDay, fmtTs, rs, isoDate, STAGE_LABEL, SUB_STATUS } from '@/lib/format';
+import { pdfInfo, readStored } from '@/lib/files';
+import { bgBankContact } from '@/lib/ocr';
 
 const GROUPS = [
   { title: 'Captured by OCR', tabs: [['details', 'Licence details'], ['bond', 'Bond'], ['bg', 'BG'], ['attachments', 'Attachments']] },
@@ -20,6 +22,21 @@ const GROUPS = [
   { title: 'Conversation', tabs: [['chat', 'Chat with party']] },
 ] as const;
 const file = (p?: string, dl = false) => `/api/files?p=${encodeURIComponent(p || '')}${dl ? '&dl=1' : ''}`;
+
+// For a BG with no bank address or e-mail yet (saved before these fields existed), read them from its stored e-BG.
+// The result only pre-fills the "Add bank contact" form: nothing is saved until the officer checks and saves it.
+async function bgContactFromPdf(l: any) {
+  const out: Record<number, ReturnType<typeof bgBankContact>> = {};
+  const blank = l.bgs.map((_: any, i: number) => i).filter((i: number) => !l.bgs[i].bankAddress && !l.bgs[i].bankEmail);
+  if (!blank.length) return out;
+  const texts: string[] = [];
+  for (const a of l.attachments.filter((x: any) => x.docType === 'e-BG' && x.path)) { try { texts.push((await pdfInfo(await readStored(a.path))).text); } catch { /* file missing: no suggestion */ } }
+  for (const i of blank) {
+    const c = bgBankContact(texts.find((t) => l.bgs[i].bgNo && t.includes(l.bgs[i].bgNo)) || '');
+    if (c.bankAddress || c.bankEmail) out[i] = c;
+  }
+  return out;
+}
 
 export default async function LicencePage({ params, searchParams }: { params: { no: string }; searchParams: { tab?: string } }) {
   const s = await needOfficer();
@@ -30,6 +47,7 @@ export default async function LicencePage({ params, searchParams }: { params: { 
   const unread = await ChatMessage.countDocuments({ licenceNo: l.licenceNo, from: 'importer', readAt: null });
   const tab = GROUPS.flatMap((g) => g.tabs.map((t) => t[0] as string)).includes(searchParams.tab || '') ? searchParams.tab! : 'details';
   const no = l.licenceNo; const adj = l.adjudication || {};
+  const bgOcr = tab === 'bond' || tab === 'bg' ? await bgContactFromPdf(l) : {};
   const badge = l.status === 'closed' ? { t: `Closed · ${fmtDate(l.closedOn)}`, c: 'dark' }
     : l.stage === 'defaulter' ? { t: `Defaulter · EO ended ${fmtDate(l.eoEndsOn)}`, c: 'warn' }
     : l.stage === 'adjudication' ? { t: adj.concluded ? 'Adjudication · concluded' : adj.scn?.no ? 'Adjudication · awaiting OIO' : 'Adjudication', c: 'warn' }
@@ -66,9 +84,9 @@ export default async function LicencePage({ params, searchParams }: { params: { 
           <tr><td>EO period ends</td><td>{fmtDate(l.eoEndsOn)}</td></tr>
           {l.icDueOn && <tr><td>IC due</td><td>{fmtDate(l.icDueOn)}</td></tr>}{l.eoBlockDueOn && <tr><td>EO block due</td><td>{fmtDate(l.eoBlockDueOn)}</td></tr>}</tbody></table>
         <div className="card"><h3 style={{ fontFamily: 'inherit', fontSize: '1.2rem' }}>Contact details</h3>
-          <div><b>IEC</b> {l.iec}</div><div><b>Address</b> {imp?.address || '–'}</div><div><b>Email</b> {imp?.email}</div><div><b>Mobile</b> {imp?.mobile}</div>
+          <div><b>IEC</b> {l.iec}</div><div><b>Address</b> {imp?.address || '–'}</div><div><b>Email</b> {imp?.email}</div><div><b>Alternative email</b> {imp?.altEmail || '–'}</div><div><b>Mobile</b> {imp?.mobile}</div>
           <p className="note">Corrections are logged with user and time</p>
-          <LicenceEdit licenceNo={no} init={{ licenceDate: isoDate(l.licenceDate), eoEndsOn: isoDate(l.eoEndsOn), issuingOffice: l.issuingOffice || '', partyName: l.partyName, dutySaved: String(l.dutySaved || ''), address: imp?.address || '', email: imp?.email || '', mobile: imp?.mobile || '' }} />
+          <LicenceEdit licenceNo={no} init={{ licenceDate: isoDate(l.licenceDate), eoEndsOn: isoDate(l.eoEndsOn), issuingOffice: l.issuingOffice || '', partyName: l.partyName, dutySaved: String(l.dutySaved || ''), address: imp?.address || '', email: imp?.email || '', altEmail: imp?.altEmail || '', mobile: imp?.mobile || '' }} />
           {l.corrections?.length > 0 && <details style={{ marginTop: 12 }}><summary>Correction log ({l.corrections.length})</summary>
             {l.corrections.map((c: any, i: number) => <div className="note" key={i}>{c.field}: {c.from || '–'} → {c.to} · {c.by} · {fmtTs(c.at)}</div>)}</details>}</div></div>}
 
@@ -77,11 +95,15 @@ export default async function LicencePage({ params, searchParams }: { params: { 
           <div className="card"><h3 style={{ fontFamily: 'inherit' }}>Bond</h3>{l.bonds.map((b: any, i: number) => <div key={i} style={{ marginBottom: 12 }}>
             <div><b>Bond no.</b> {b.bondNo}</div><div><b>Bond date</b> {fmtDate(b.bondDate)}</div><div><b>Bond amount</b> {rs(b.amount)}</div><div><b>Executed at</b> {b.executedAt || '–'}</div><div><b>Status</b> {b.status}</div></div>)}</div>
           <div className="card"><h3 style={{ fontFamily: 'inherit' }}>Bank guarantee</h3>{l.bgs.length ? l.bgs.map((g: any, i: number) => <div key={i} style={{ marginBottom: 12 }}>
-            <div><b>BG no.</b> {g.bgNo}</div><div><b>Bank</b> {g.bank}{g.branch ? `, ${g.branch} branch` : ''}</div><div><b>BG amount</b> {rs(g.amount)}</div><div><b>Valid till</b> {fmtDate(g.validTill)}</div><div><b>Linked e-Bond</b> {g.linkedBond}</div></div>) : <p className="note">No BG on this licence.</p>}</div>
+            <div><b>BG no.</b> {g.bgNo}</div><div><b>Bank</b> {g.bank}{g.branch ? `, ${g.branch} branch` : ''}</div><div><b>BG amount</b> {rs(g.amount)}</div><div><b>Valid till</b> {fmtDate(g.validTill)}</div><div><b>Linked e-Bond</b> {g.linkedBond}</div>
+            <div><b>Bank address</b> {g.bankAddress || '–'}</div><div><b>Bank email</b> {g.bankEmail ? <a href={`mailto:${g.bankEmail}`}>{g.bankEmail}</a> : '–'}</div>
+            {bgOcr[i] && <p className="note" style={{ margin: '6px 0 0' }}>Bank contact was read from the e-BG by OCR: open the form, check it and save.</p>}
+            <FormPanel url={`/api/officer/licences/${no}/bonds`} label={g.bankAddress || g.bankEmail ? 'Edit bank contact' : '+ Add bank contact'} hidden={{ kind: 'bgContact', index: String(i), bgNo: g.bgNo }}
+              fields={[{ name: 'bankAddress', label: 'Bank address', type: 'textarea', defaultValue: g.bankAddress || bgOcr[i]?.bankAddress || '' }, { name: 'bankEmail', label: 'Bank email', type: 'email', defaultValue: g.bankEmail || bgOcr[i]?.bankEmail || '' }]} /></div>) : <p className="note">No BG on this licence.</p>}</div>
         </div>
         <div className="row" style={{ alignItems: 'flex-start' }}>
           <FormPanel url={`/api/officer/licences/${no}/bonds`} label="+ Add bond" hidden={{ kind: 'bond' }} file="e-Bond" fileRequired={false} fields={[{ name: 'bondNo', label: 'Bond no.', required: true }, { name: 'bondDate', label: 'Bond date', type: 'date', required: true }, { name: 'amount', label: 'Bond amount (₹)', type: 'number', required: true }, { name: 'executedAt', label: 'Executed at' }]} />
-          <FormPanel url={`/api/officer/licences/${no}/bonds`} label="+ Add BG" hidden={{ kind: 'bg' }} file="e-BG" fileRequired={false} fields={[{ name: 'bgNo', label: 'BG no.', required: true }, { name: 'bank', label: 'Bank', required: true }, { name: 'branch', label: 'Branch' }, { name: 'amount', label: 'BG amount (₹)', type: 'number', required: true }, { name: 'validTill', label: 'Valid till', type: 'date', required: true }, { name: 'linkedBond', label: 'Linked e-Bond', type: 'select', options: l.bonds.map((b: any) => b.bondNo) }]} />
+          <FormPanel url={`/api/officer/licences/${no}/bonds`} label="+ Add BG" hidden={{ kind: 'bg' }} file="e-BG" fileRequired={false} fields={[{ name: 'bgNo', label: 'BG no.', required: true }, { name: 'bank', label: 'Bank', required: true }, { name: 'branch', label: 'Branch' }, { name: 'amount', label: 'BG amount (₹)', type: 'number', required: true }, { name: 'validTill', label: 'Valid till', type: 'date', required: true }, { name: 'linkedBond', label: 'Linked e-Bond', type: 'select', options: l.bonds.map((b: any) => b.bondNo) }, { name: 'bankAddress', label: 'Bank address (read from the e-BG if left blank)', type: 'textarea' }, { name: 'bankEmail', label: 'Bank email (read from the e-BG if left blank)', type: 'email' }]} />
         </div></>}
 
       {tab === 'attachments' && <>

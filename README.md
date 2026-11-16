@@ -45,6 +45,10 @@ Derived from the sample data in the deck; the deck does not state them:
 ## OCR (src/lib/ocr.ts)
 Reads the text layer of the three PDFs (unpdf) and extracts fields with regular expressions, flagging anything missing, malformed or inconsistent (for example IEC differs between licence and e-Bond) as "Check". The patterns are written from the field names in the deck: tune them against real DGFT, ICEGATE and e-BG PDFs. Scanned PDFs have no text layer; plug an image OCR engine into `runOcr` for those.
 
+**BG bank contact.** Each BG also holds the bank's address and e-mail (both optional). OCR reads them from the e-BG: the branch where claims are payable, and the bank's BG confirmation e-mail. They are filled when a licence is added, and when a BG is added later with its PDF attached and the two boxes left blank. For a BG saved earlier, the BG tab reads them from the stored e-BG and pre-fills **+ Add bank contact**; nothing is saved until the officer saves it. Changes are in the correction log.
+
+**Alternative e-mail.** An importer can have a second e-mail (Licence details › Contact details › Correct details, or the "Alternative email" row when adding a licence). It gets a copy of every notice sent to the importer. Registration and the login OTP still use the main e-mail only.
+
 ## Licence chat
 Each licence has one conversation between the importer (IEC login) and the EODC cell (all officers).
 - Importer: **Messages** box at the bottom of the licence page; "New message from the EODC cell" on the home page; **Messages** in the top bar lists all conversations.

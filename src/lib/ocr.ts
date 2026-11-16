@@ -1,6 +1,7 @@
 import { pdfInfo } from './files';
 
-export type OcrField = { key: string; label: string; value: string; status: 'OK' | 'Check'; source: 'licence' | 'ebond' | 'ebg'; note?: string };
+// blankOk: the field may be left empty (it is then not flagged "Check")
+export type OcrField = { key: string; label: string; value: string; status: 'OK' | 'Check'; source: 'licence' | 'ebond' | 'ebg'; note?: string; blankOk?: boolean };
 
 // Loose date token: also catches OCR noise such as 27-0ct-2O27. It is parsed afterwards (parseDate);
 // when parsing fails the raw text is shown to the officer with a Check flag.
@@ -22,8 +23,10 @@ const clean = (s: string) => s.replace(/[^\x20-\x7E\n]/g, ' ').replace(/\s*\n\s*
 const first = (t: string, res: RegExp[]) => { for (const r of res) { const m = t.match(r); if (m?.[1] && clean(m[1])) return clean(m[1]); } return ''; };
 const title = (s: string) => s.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
 
-type Spec = { key: string; label: string; source: OcrField['source']; get: (t: string, all: Record<OcrField['source'], string>) => string; valid: (v: string) => boolean; date?: boolean; optional?: boolean; hint?: string };
+type Spec = { key: string; label: string; source: OcrField['source']; get: (t: string, all: Record<OcrField['source'], string>) => string; valid: (v: string) => boolean; date?: boolean; optional?: boolean; blankOk?: boolean; hint?: string };
 const nonEmpty = (v: string) => v.length > 1;
+const isEmail = (v: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v);
+const EMAILS = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
 const isDate = (v: string) => !!parseDate(v);
 const isAmt = (v: string) => /^\d+(\.\d+)?$/.test(v) && +v > 0;
 
@@ -48,6 +51,18 @@ function schemeOf(t: string) {
   return /\bEPCG\b|Export Promotion Capital Goods/i.test(t) ? 'EPCG' : '';
 }
 const NOT_PARTY_EMAIL = /@(?:[\w-]+\.)*(?:nic\.in|gov\.in|icegate\.gov\.in)$|@(?:[\w-]+\.)*bank\.in$|^bgconfirmation@/i;
+const partyEmails = (t: string) => [...new Set((t.match(EMAILS) || []).filter((e) => !NOT_PARTY_EMAIL.test(e)).map((e) => e.toLowerCase()))];
+
+// Bank contact printed on an e-BG: the branch where claims are payable, and the bank's BG confirmation e-mail.
+// "All claims under this guarantee will be payable at <branch address> - 560025" / "... BY SENDING EMAIL TO BGCONFIRMATION@HDFC.BANK.IN"
+const PIN = '\\b\\d{3}\\s?\\d{3}\\b';
+export function bgBankContact(t: string) {
+  const bankAddress = first(t, [new RegExp(`payable at\\s+([\\s\\S]{10,300}?${PIN})`, 'i'), new RegExp(`acting through its branch at\\s+([\\s\\S]{10,300}?${PIN})`, 'i'),
+    /(?:Branch|Bank)\s*Address\s*[:\-]\s*(.+)/i]).replace(/,(?=\S)/g, ', ');
+  const bankEmail = (first(t, [/E-?MAIL\s*(?:TO|ID|ADDRESS)?\s*[:\-]?\s*([\w.+-]+@[\w-]+(?:\.[\w-]+)+)/i])
+    || (t.match(EMAILS) || []).find((e) => !/@(?:[\w-]+\.)*(?:nic|gov)\.in$/i.test(e)) || '').toLowerCase();
+  return { bankAddress, bankEmail };
+}
 
 // Patterns are tuned to the DGFT Advance Authorisation, the CBIC Single All-India e-Bond and a bank e-BG
 // (sample files: license_doc.pdf, bond.pdf, bank_gran.pdf). Older generic patterns follow as fallbacks.
@@ -82,8 +97,10 @@ const SPECS: Spec[] = [
     get: (t) => num(first(t, [/in the sum of\s*Rs\.?\s*(?:\([a-z]\)\s*)?([\d,]+(?:\.\d+)?)/i, /Bond\s*Amount[^0-9\n]{0,20}([\d,]+(?:\.\d+)?)/i])) },
   { key: 'executedAt', label: 'Executed at', source: 'ebond', valid: nonEmpty,
     get: (t) => first(t, [/behalf of the President of India by\s+[^,\n]+,\s*[^,\n]+,\s*([A-Z0-9]{5,6})\b/i, /Executed\s*at\s*[:\-]?\s*(.+)/i, /Customs\s*Station\s*[:\-]\s*(.+)/i]) },
-  { key: 'email', label: 'Contact email', source: 'ebond', valid: (v) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v), hint: 'Not printed on the e-Bond: enter the importer’s e-mail',
-    get: (t) => (t.match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g) || []).find((e) => !NOT_PARTY_EMAIL.test(e)) || '' },
+  { key: 'email', label: 'Contact email', source: 'ebond', valid: isEmail, hint: 'Not printed on the e-Bond: enter the importer’s e-mail',
+    get: (t) => (t.match(EMAILS) || []).find((e) => !NOT_PARTY_EMAIL.test(e)) || '' },
+  { key: 'altEmail', label: 'Alternative email', source: 'ebond', valid: isEmail, blankOk: true, hint: 'Optional: a second e-mail that gets a copy of every notice',
+    get: (t) => partyEmails(t)[1] || '' },
   { key: 'mobile', label: 'Contact mobile', source: 'ebond', valid: (v) => /^[6-9]\d{9}$/.test(v), hint: 'Not printed on the e-Bond: enter the importer’s mobile',
     get: (t) => first(t, [/(?:Mobile|Phone|Contact)[^0-9\n]{0,15}(?:\+?91[\s-]?)?([6-9]\d{9})/i]) },
   { key: 'bgNo', label: 'BG no.', source: 'ebg', valid: (v) => v.length > 3,
@@ -96,6 +113,10 @@ const SPECS: Spec[] = [
     get: (t) => first(t, [/(?:^|\n)\s*FOR\s+([A-Z][A-Z&. ]*BANK(?: LTD| LIMITED)?)\.?\s*(?:\n|$)/, /\bWE,?\s+([A-Z][A-Za-z&. ]*Bank\s+(?:Ltd|Limited))/, /Bank\s*(?:Name)?\s*[:\-]\s*(.+)/i]) },
   { key: 'bgBranch', label: 'BG branch', source: 'ebg', valid: nonEmpty,
     get: (t) => title(first(t, [/EXPIRY PLACE\s*:\s*([A-Za-z ]+)/i, /Branch\s*[:\-]\s*(.+)/i])) },
+  { key: 'bgBankAddress', label: 'BG bank address', source: 'ebg', valid: nonEmpty, blankOk: true, hint: 'Not found on the e-BG: enter it if known',
+    get: (t) => bgBankContact(t).bankAddress },
+  { key: 'bgBankEmail', label: 'BG bank email', source: 'ebg', valid: isEmail, blankOk: true, hint: 'Not found on the e-BG: enter it if known',
+    get: (t) => bgBankContact(t).bankEmail },
 ];
 
 export async function runOcr(bufs: { licence: Buffer; ebond: Buffer; ebg?: Buffer }) {
@@ -119,7 +140,8 @@ export async function runOcr(bufs: { licence: Buffer; ebond: Buffer; ebg?: Buffe
     }
     if (s.date && raw && !value) note = `OCR read "${raw}": enter the correct date`;
     if (!value && !note && s.hint) note = s.hint;
-    fields.push({ key: s.key, label: s.label, value, source: s.source, status: value && s.valid(value) && !(note && value) ? 'OK' : 'Check', note });
+    const ok = !value ? !!s.blankOk : s.valid(value) && !note;
+    fields.push({ key: s.key, label: s.label, value, source: s.source, status: ok ? 'OK' : 'Check', note, ...(s.blankOk && { blankOk: true }) });
   }
   // a scanned PDF has (almost) no text layer; stamps such as "CBIC Internal" on each page do not count
   const scanned = [l, b].some((x) => x.pages > 0 && x.text.replace(/CBIC Internal/g, '').trim().length < 40 * x.pages / 4);

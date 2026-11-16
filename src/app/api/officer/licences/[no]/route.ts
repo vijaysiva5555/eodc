@@ -13,6 +13,7 @@ const Body = z.object({
   issuingOffice: z.string().optional(), partyName: z.string().min(2).optional(),
   dutySaved: z.coerce.number().positive().optional(),
   address: z.string().optional(), email: z.string().email().optional(), mobile: z.string().regex(/^\+?\d{10,13}$/).optional(),
+  altEmail: z.string().trim().email().or(z.literal('')).optional(), // '' removes it
 });
 
 // Every correction is logged with user and time (licence.corrections)
@@ -43,7 +44,8 @@ export async function PATCH(req: Request, { params }: { params: { no: string } }
       set('address', imp.address, v.address, () => (imp.address = v.address));
       set('email', imp.email, v.email, () => (imp.email = v.email));
       set('mobile', imp.mobile, v.mobile, () => (imp.mobile = v.mobile));
-      if (log.some((l) => ['address', 'email', 'mobile'].includes(l.field))) await imp.save();
+      set('altEmail', imp.altEmail, v.altEmail, () => (imp.altEmail = v.altEmail || undefined));
+      if (log.some((l) => ['address', 'email', 'mobile', 'altEmail'].includes(l.field))) await imp.save();
     }
     if (!log.length) return Response.json({ changed: 0 });
     lic.corrections.push(...log); await lic.save();

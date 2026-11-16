@@ -3,7 +3,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { send } from './api';
 
-type Field = { key: string; label: string; value: string; status: 'OK' | 'Check'; source: 'licence' | 'ebond' | 'ebg'; note?: string };
+type Field = { key: string; label: string; value: string; status: 'OK' | 'Check'; source: 'licence' | 'ebond' | 'ebg'; note?: string; blankOk?: boolean };
 type Ocr = { token: string; paths: Record<string, string | null>; fields: Field[]; pages: Record<string, number>; warning?: string; duplicate: { licenceNo: string; scheme: string; status: string; partyName: string } | null };
 
 const DOCS = [
@@ -30,7 +30,8 @@ export default function LicenceWizard() {
       setOcr(r); setFields(r.fields);
     } catch (x) { setErr((x as Error).message); } finally { setBusy(false); }
   }
-  const edit = (key: string, value: string) => setFields(fields.map((f) => (f.key === key ? { ...f, value, status: 'Check' } : f)));
+  // an edited value must be confirmed with Check ✓; optional fields (blankOk) may simply be cleared
+  const edit = (key: string, value: string) => setFields(fields.map((f) => (f.key === key ? { ...f, value, status: !value && f.blankOk ? 'OK' : 'Check' } : f)));
   const confirm = (key: string) => setFields(fields.map((f) => (f.key === key ? { ...f, status: 'OK', note: undefined } : f)));
   const checks = fields.filter((f) => f.status === 'Check').length;
 

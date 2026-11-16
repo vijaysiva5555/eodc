@@ -12,6 +12,7 @@ const Bond = new Schema({
 
 const BG = new Schema({
   bgNo: String, bank: String, branch: String, amount: Number, validTill: Date, linkedBond: String,
+  bankAddress: String, bankEmail: String, // where to write to the bank (BG renewal / invocation); both optional
 }, { _id: false });
 
 const Attachment = new Schema({

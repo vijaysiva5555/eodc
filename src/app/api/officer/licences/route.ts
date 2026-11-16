@@ -36,8 +36,10 @@ const Values = z.object({
   bondNo: z.string().min(4), bondDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   bondAmount: z.coerce.number().positive(), executedAt: z.string().optional().default(''),
   email: z.string().email(), mobile: z.string().regex(/^[6-9]\d{9}$/), address: z.string().optional().default(''),
+  altEmail: z.string().trim().email().or(z.literal('')).optional(),
   bgNo: z.string().optional(), bgAmount: z.coerce.number().optional(), bgValidTill: z.string().optional(),
   bgBank: z.string().optional(), bgBranch: z.string().optional(),
+  bgBankAddress: z.string().trim().max(400).optional(), bgBankEmail: z.string().trim().email().or(z.literal('')).optional(),
   eoEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // "Export Validity" printed on Advance Authorisations
 });
 
@@ -77,11 +79,14 @@ export async function POST(req: Request) {
       eoAmount: v.scheme === 'EPCG' ? v.dutySaved * RULES.eoMultiple : undefined,
       ...d, ...(v.eoEndsOn && { eoEndsOn: new Date(v.eoEndsOn) }), bondDate: bDate, stage: 'new', status: 'active',
       bonds: [{ bondNo: v.bondNo, bondDate: bDate, amount: v.bondAmount, executedAt: v.executedAt, status: 'Live' }],
-      bgs: v.bgNo ? [{ bgNo: v.bgNo, bank: v.bgBank, branch: v.bgBranch, amount: v.bgAmount, validTill: new Date(v.bgValidTill!), linkedBond: v.bondNo }] : [],
+      bgs: v.bgNo ? [{ bgNo: v.bgNo, bank: v.bgBank, branch: v.bgBranch, amount: v.bgAmount, validTill: new Date(v.bgValidTill!), linkedBond: v.bondNo, bankAddress: v.bgBankAddress, bankEmail: v.bgBankEmail }] : [],
       attachments: att,
     });
     // importer record comes from the e-Bond contact details; the importer then registers with the same details
-    await Importer.updateOne({ iec: v.iec }, { $setOnInsert: { iec: v.iec, name: v.partyName, email: v.email, mobile: v.mobile, address: v.address, registered: false } }, { upsert: true });
+    const altEmail = v.altEmail && v.altEmail.toLowerCase() !== v.email.toLowerCase() ? v.altEmail : undefined;
+    await Importer.updateOne({ iec: v.iec }, { $setOnInsert: { iec: v.iec, name: v.partyName, email: v.email, mobile: v.mobile, address: v.address, registered: false, ...(altEmail && { altEmail }) } }, { upsert: true });
+    // an importer already on record keeps its contact details; only a missing alternative e-mail is filled in
+    if (altEmail) await Importer.updateOne({ iec: v.iec, altEmail: { $in: [null, ''] } }, { $set: { altEmail } });
     await audit(s, 'add_licence', v.licenceNo);
     return Response.json({ licenceNo: v.licenceNo, scheme: v.scheme }, { status: 201 });
   } catch (e) { return errorResponse(e); }
